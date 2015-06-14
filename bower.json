@@ -1,0 +1,26 @@
+{
+  "name": "active-model-adapter-dist",
+  "version": "0.1.13",
+  "homepage": "https://github.com/ember-data/active-model-adapter-dist",
+  "authors": [
+    "Stanley Stuart <stanley@stan.li>"
+  ],
+  "description": "ActiveModel Adapter for Ember Data",
+  "main": "active-model-adapter.js",
+  "keywords": [
+    "ember",
+    "ember-data"
+  ],
+  "dependencies": {
+    "ember": ">= 1.8 < 3.0",
+    "ember-data": ">= 1.0.0-beta.19"
+  }
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}
