@@ -5,7 +5,7 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   1.13.0
+ * @version   1.13.1
  */
 
 (function() {
@@ -220,6 +220,7 @@ define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exp
   var pluralize = _ember["default"].String.pluralize;
   var RESTAdapter = _emberData["default"].RESTAdapter;
   var InvalidError = _emberData["default"].InvalidError;
+  var errorsHashToArray = _emberData["default"].errorsHashToArray;
 
   /**
     The ActiveModelAdapter is a subclass of the RESTAdapter designed to integrate
@@ -332,29 +333,45 @@ define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exp
     },
 
     /**
-      The ActiveModelAdapter overrides the `ajaxError` method
-      to return a DS.InvalidError for all 422 Unprocessable Entity
-      responses.
+      The ActiveModelAdapter overrides the `handleResponse` method
+      to format errors passed to a DS.InvalidError for all
+      422 Unprocessable Entity responses.
        A 422 HTTP response from the server generally implies that the request
       was well formed but the API was unable to process it because the
       content was not semantically correct or meaningful per the API.
        For more information on 422 HTTP Error code see 11.2 WebDAV RFC 4918
       https://tools.ietf.org/html/rfc4918#section-11.2
-       @method ajaxError
-      @param {Object} jqXHR
-      @return error
+       @method handleResponse
+      @param  {Number} status
+      @param  {Object} headers
+      @param  {Object} payload
+      @return {Object | DS.AdapterError} response
     */
-    ajaxError: function (jqXHR) {
-      var error = this._super.apply(this, arguments);
+    handleResponse: function (status, headers, payload) {
+      if (this.isInvalid(status, headers, payload)) {
+        var errors = errorsHashToArray(payload.errors);
 
-      if (jqXHR && jqXHR.status === 422) {
-        var response = _ember["default"].$.parseJSON(jqXHR.responseText);
-        return new InvalidError(response);
+        return new InvalidError(errors);
       } else {
-        return error;
+        return this._super.apply(this, arguments);
       }
     }
   });
+
+  if (!errorsHashToArray) {
+    ActiveModelAdapter.reopen({
+      ajaxError: function (jqXHR) {
+        var error = this._super.apply(this, arguments);
+
+        if (jqXHR && jqXHR.status === 422) {
+          var response = _ember["default"].$.parseJSON(jqXHR.responseText);
+          return new InvalidError(response);
+        } else {
+          return error;
+        }
+      }
+    });
+  }
 
   exports["default"] = ActiveModelAdapter;
 });
