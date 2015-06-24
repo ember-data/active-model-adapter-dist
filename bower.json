@@ -14,7 +14,7 @@
   "dependencies": {
     "ember": ">= 1.8 < 3.0",
     "ember-data": ">= 1.0.0-beta.19"
-  }
+  },
   "license": "MIT",
   "ignore": [
     "**/.*",
