@@ -5,7 +5,7 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   1.13.2
+ * @version   1.13.3
  */
 
 (function() {
@@ -210,17 +210,17 @@ define("ember-data", ["exports"], function (exports) {
   exports["default"] = DS;
 });
 define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exports, _ember, _emberData) {
-
-  /**
-    @module active-model-adapter
-  */
-
-  var decamelize = _ember["default"].String.decamelize;
-  var underscore = _ember["default"].String.underscore;
-  var pluralize = _ember["default"].String.pluralize;
-  var RESTAdapter = _emberData["default"].RESTAdapter;
   var InvalidError = _emberData["default"].InvalidError;
   var errorsHashToArray = _emberData["default"].errorsHashToArray;
+  var RESTAdapter = _emberData["default"].RESTAdapter;
+  var _Ember$String = _ember["default"].String;
+  var pluralize = _Ember$String.pluralize;
+  var decamelize = _Ember$String.decamelize;
+  var underscore = _Ember$String.underscore;
+
+  /**
+    @module ember-data
+  */
 
   /**
     The ActiveModelAdapter is a subclass of the RESTAdapter designed to integrate
@@ -341,11 +341,9 @@ define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exp
       content was not semantically correct or meaningful per the API.
        For more information on 422 HTTP Error code see 11.2 WebDAV RFC 4918
       https://tools.ietf.org/html/rfc4918#section-11.2
-       @method handleResponse
-      @param  {Number} status
-      @param  {Object} headers
-      @param  {Object} payload
-      @return {Object | DS.AdapterError} response
+       @method ajaxError
+      @param {Object} jqXHR
+      @return error
     */
     handleResponse: function (status, headers, payload) {
       if (this.isInvalid(status, headers, payload)) {
@@ -358,32 +356,22 @@ define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exp
     }
   });
 
-  if (!errorsHashToArray) {
-    ActiveModelAdapter.reopen({
-      ajaxError: function (jqXHR) {
-        var error = this._super.apply(this, arguments);
-
-        if (jqXHR && jqXHR.status === 422) {
-          var response = _ember["default"].$.parseJSON(jqXHR.responseText);
-          return new InvalidError(response);
-        } else {
-          return error;
-        }
-      }
-    });
-  }
-
   exports["default"] = ActiveModelAdapter;
 });
-define('active-model-serializer', ['exports', 'ember', 'ember-data'], function (exports, _ember, _emberData) {
-  var forEach = _ember["default"].EnumerableUtils.forEach;
+define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (exports, _emberData, _ember) {
+
+  /**
+    @module ember-data
+   */
+
   var _Ember$String = _ember["default"].String;
   var singularize = _Ember$String.singularize;
-  var camelize = _Ember$String.camelize;
   var classify = _Ember$String.classify;
   var decamelize = _Ember$String.decamelize;
+  var camelize = _Ember$String.camelize;
   var underscore = _Ember$String.underscore;
   var RESTSerializer = _emberData["default"].RESTSerializer;
+  var normalizeModelName = _emberData["default"].normalizeModelName;
 
   /**
     The ActiveModelSerializer is a subclass of the RESTSerializer designed to integrate
@@ -546,9 +534,7 @@ define('active-model-serializer', ['exports', 'ember', 'ember-data'], function (
       if (_ember["default"].isNone(belongsTo)) {
         json[jsonKey] = null;
       } else {
-        json[jsonKey] = classify(belongsTo.modelName).replace(/(\/)([a-z])/g, function (match, separator, chr) {
-          return match.toUpperCase();
-        }).replace('/', '::');
+        json[jsonKey] = classify(belongsTo.modelName).replace('/', '::');
       }
     },
 
@@ -632,6 +618,8 @@ define('active-model-serializer', ['exports', 'ember', 'ember-data'], function (
 
       if (this.keyForRelationship) {
         typeClass.eachRelationship(function (key, relationship) {
+          var _this = this;
+
           var payloadKey, payload;
           if (relationship.options.polymorphic) {
             payloadKey = this.keyForAttribute(key, 'deserialize');
@@ -639,9 +627,8 @@ define('active-model-serializer', ['exports', 'ember', 'ember-data'], function (
             if (payload && payload.type) {
               payload.type = this.modelNameFromPayloadKey(payload.type);
             } else if (payload && relationship.kind === 'hasMany') {
-              var self = this;
-              forEach(payload, function (single) {
-                single.type = self.modelNameFromPayloadKey(single.type);
+              payload.forEach(function (single) {
+                return single.type = _this.modelNameFromPayloadKey(single.type);
               });
             }
           } else {
@@ -661,18 +648,13 @@ define('active-model-serializer', ['exports', 'ember', 'ember-data'], function (
       }
     },
     modelNameFromPayloadKey: function (key) {
-      var convertedFromRubyModule = camelize(singularize(key)).replace(/(^|\:)([A-Z])/g, function (match, separator, chr) {
-        return match.toLowerCase();
-      }).replace('::', '/');
-      return this._super(convertedFromRubyModule);
+      var convertedFromRubyModule = singularize(key.replace('::', '/'));
+      return normalizeModelName(convertedFromRubyModule);
     }
   });
 
   exports["default"] = ActiveModelSerializer;
 });
-/**
-  @module active-model-adapter
-*/
 define('index', ['exports', './active-model-adapter', './active-model-serializer'], function (exports, _activeModelAdapter, _activeModelSerializer) {
   exports["default"] = _activeModelAdapter["default"];
   exports.ActiveModelAdapter = _activeModelAdapter["default"];
@@ -683,7 +665,7 @@ define("initializers/active-model-adapter", ["exports", "active-model-adapter", 
     name: "active-model-adapter",
     initialize: function (registry, application) {
       registry.register("adapter:-active-model", _activeModelAdapter["default"]);
-      registry.register("serializer:-active-model", _activeModelAdapterActiveModelSerializer["default"]);
+      registry.register("serializer:-active-model", _activeModelAdapterActiveModelSerializer["default"].extend({ isNewSerializerAPI: true }));
     }
   };
 });
