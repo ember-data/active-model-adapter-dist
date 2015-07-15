@@ -5,7 +5,7 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   1.13.3
+ * @version   1.13.4
  */
 
 (function() {
@@ -647,11 +647,67 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
         }, this);
       }
     },
+
+    extractRelationships: function (modelClass, resourceHash) {
+      modelClass.eachRelationship(function (key, relationshipMeta) {
+        var relationshipKey = this.keyForRelationship(key, relationshipMeta.kind, 'deserialize');
+
+        // prefer the format the AMS gem expects, e.g.:
+        // relationship: {id: id, type: type}
+        if (relationshipMeta.options.polymorphic) {
+          extractPolymorphicRelationships(key, relationshipMeta, resourceHash, relationshipKey);
+        }
+        // If the preferred format is not found, use {relationship_name_id, relationship_name_type}
+        if (resourceHash.hasOwnProperty(relationshipKey) && typeof resourceHash[relationshipKey] !== 'object') {
+          var polymorphicTypeKey = this.keyForRelationship(key) + '_type';
+          if (resourceHash[polymorphicTypeKey] && relationshipMeta.options.polymorphic) {
+            var id = resourceHash[relationshipKey];
+            var type = resourceHash[polymorphicTypeKey];
+            delete resourceHash[polymorphicTypeKey];
+            delete resourceHash[relationshipKey];
+            resourceHash[relationshipKey] = { id: id, type: type };
+          }
+        }
+      }, this);
+      return this._super.apply(this, arguments);
+    },
+
     modelNameFromPayloadKey: function (key) {
       var convertedFromRubyModule = singularize(key.replace('::', '/'));
       return normalizeModelName(convertedFromRubyModule);
     }
   });
+
+  function extractPolymorphicRelationships(key, relationshipMeta, resourceHash, relationshipKey) {
+    var polymorphicKey = decamelize(key);
+    if (polymorphicKey in resourceHash && typeof resourceHash[polymorphicKey] === 'object') {
+      if (relationshipMeta.kind === 'belongsTo') {
+        var hash = resourceHash[polymorphicKey];
+        var id = hash.id;
+        var type = hash.type;
+
+        resourceHash[relationshipKey] = { id: id, type: type };
+        // otherwise hasMany
+      } else {
+        var hashes = resourceHash[polymorphicKey];
+
+        if (!hashes) {
+          return;
+        }
+
+        // TODO: replace this with map when ActiveModelAdapter branches for Ember Data 2.0
+        var array = [];
+        for (var i = 0, _length = hashes.length; i < _length; i++) {
+          var hash = hashes[i];
+          var id = hash.id;
+          var type = hash.type;
+
+          array.push({ id: id, type: type });
+        }
+        resourceHash[relationshipKey] = array;
+      }
+    }
+  }
 
   exports["default"] = ActiveModelSerializer;
 });
