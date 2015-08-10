@@ -1,6 +1,6 @@
 {
   "name": "active-model-adapter",
-  "version": "1.13.5",
+  "version": "1.13.6",
   "dependencies": {
     "ember-data": ">= 1.13.3"
   }

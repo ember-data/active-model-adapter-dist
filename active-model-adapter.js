@@ -5,7 +5,7 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   1.13.5
+ * @version   1.13.6
  */
 
 (function() {
@@ -214,9 +214,6 @@ define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exp
   var errorsHashToArray = _emberData["default"].errorsHashToArray;
   var RESTAdapter = _emberData["default"].RESTAdapter;
   var _Ember$String = _ember["default"].String;
-  var pluralize = _Ember$String.pluralize;
-  var decamelize = _Ember$String.decamelize;
-  var underscore = _Ember$String.underscore;
 
   /**
     @module ember-data
@@ -313,6 +310,9 @@ define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exp
     @extends DS.RESTAdapter
   **/
 
+  var pluralize = _Ember$String.pluralize;
+  var decamelize = _Ember$String.decamelize;
+  var underscore = _Ember$String.underscore;
   var ActiveModelAdapter = RESTAdapter.extend({
     defaultSerializer: '-active-model',
     /**
@@ -371,7 +371,6 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
   var camelize = _Ember$String.camelize;
   var underscore = _Ember$String.underscore;
   var RESTSerializer = _emberData["default"].RESTSerializer;
-  var normalizeModelName = _emberData["default"].normalizeModelName;
 
   /**
     The ActiveModelSerializer is a subclass of the RESTSerializer designed to integrate
@@ -460,6 +459,7 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
     @namespace DS
     @extends DS.RESTSerializer
   */
+  var normalizeModelName = _emberData["default"].normalizeModelName;
   var ActiveModelSerializer = RESTSerializer.extend({
     // SERIALIZE
 
@@ -483,10 +483,10 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
     */
     keyForRelationship: function (relationshipModelName, kind) {
       var key = decamelize(relationshipModelName);
-      if (kind === 'belongsTo') {
-        return key + '_id';
-      } else if (kind === 'hasMany') {
-        return singularize(key) + '_ids';
+      if (kind === "belongsTo") {
+        return key + "_id";
+      } else if (kind === "hasMany") {
+        return singularize(key) + "_ids";
       } else {
         return key;
       }
@@ -529,7 +529,7 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
     serializePolymorphicType: function (snapshot, json, relationship) {
       var key = relationship.key;
       var belongsTo = snapshot.belongsTo(key);
-      var jsonKey = underscore(key + '_type');
+      var jsonKey = underscore(key + "_type");
 
       if (_ember["default"].isNone(belongsTo)) {
         json[jsonKey] = null;
@@ -622,17 +622,21 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
 
           var payloadKey, payload;
           if (relationship.options.polymorphic) {
-            payloadKey = this.keyForAttribute(key, 'deserialize');
+            payloadKey = this.keyForAttribute(key, "deserialize");
+            if (!hash.hasOwnProperty(payloadKey)) {
+              return;
+            }
             payload = hash[payloadKey];
+
             if (payload && payload.type) {
               payload.type = this.modelNameFromPayloadKey(payload.type);
-            } else if (payload && relationship.kind === 'hasMany') {
+            } else if (payload && relationship.kind === "hasMany") {
               payload.forEach(function (single) {
                 return single.type = _this.modelNameFromPayloadKey(single.type);
               });
             }
           } else {
-            payloadKey = this.keyForRelationship(key, relationship.kind, 'deserialize');
+            payloadKey = this.keyForRelationship(key, relationship.kind, "deserialize");
             if (!hash.hasOwnProperty(payloadKey)) {
               return;
             }
@@ -650,7 +654,7 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
 
     extractRelationships: function (modelClass, resourceHash) {
       modelClass.eachRelationship(function (key, relationshipMeta) {
-        var relationshipKey = this.keyForRelationship(key, relationshipMeta.kind, 'deserialize');
+        var relationshipKey = this.keyForRelationship(key, relationshipMeta.kind, "deserialize");
 
         // prefer the format the AMS gem expects, e.g.:
         // relationship: {id: id, type: type}
@@ -680,32 +684,32 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
 
   function extractPolymorphicRelationships(key, relationshipMeta, resourceHash, relationshipKey) {
     var polymorphicKey = decamelize(key);
-    if (polymorphicKey in resourceHash && typeof resourceHash[polymorphicKey] === 'object') {
+    var hash = resourceHash[polymorphicKey];
+    if (hash !== null && typeof hash === 'object') {
       if (relationshipMeta.kind === 'belongsTo') {
-        var hash = resourceHash[polymorphicKey];
         var id = hash.id;
         var type = hash.type;
 
         resourceHash[relationshipKey] = { id: id, type: type };
         // otherwise hasMany
       } else {
-        var hashes = resourceHash[polymorphicKey];
+          var hashes = resourceHash[polymorphicKey];
 
-        if (!hashes) {
-          return;
+          if (!hashes) {
+            return;
+          }
+
+          // TODO: replace this with map when ActiveModelAdapter branches for Ember Data 2.0
+          var array = [];
+          for (var i = 0, _length = hashes.length; i < _length; i++) {
+            var _hash = hashes[i];
+            var id = _hash.id;
+            var type = _hash.type;
+
+            array.push({ id: id, type: type });
+          }
+          resourceHash[relationshipKey] = array;
         }
-
-        // TODO: replace this with map when ActiveModelAdapter branches for Ember Data 2.0
-        var array = [];
-        for (var i = 0, _length = hashes.length; i < _length; i++) {
-          var hash = hashes[i];
-          var id = hash.id;
-          var type = hash.type;
-
-          array.push({ id: id, type: type });
-        }
-        resourceHash[relationshipKey] = array;
-      }
     }
   }
 
@@ -718,10 +722,10 @@ define('index', ['exports', './active-model-adapter', './active-model-serializer
 });
 define("initializers/active-model-adapter", ["exports", "active-model-adapter", "active-model-serializer"], function (exports, _activeModelAdapter, _activeModelAdapterActiveModelSerializer) {
   exports["default"] = {
-    name: "active-model-adapter",
+    name: 'active-model-adapter',
     initialize: function (registry, application) {
-      registry.register("adapter:-active-model", _activeModelAdapter["default"]);
-      registry.register("serializer:-active-model", _activeModelAdapterActiveModelSerializer["default"].extend({ isNewSerializerAPI: true }));
+      registry.register('adapter:-active-model', _activeModelAdapter["default"]);
+      registry.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"].extend({ isNewSerializerAPI: true }));
     }
   };
 });
@@ -751,7 +755,7 @@ define('instance-initializers/active-model-adapter', ['exports', 'active-model-a
       }
 
       registry.register('adapter:-active-model', _activeModelAdapter["default"]);
-      registry.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
+      registry.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"].extend({ isNewSerializerAPI: true }));
     }
   };
 });
