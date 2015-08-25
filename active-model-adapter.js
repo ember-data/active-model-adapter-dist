@@ -5,7 +5,7 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   1.13.6
+ * @version   2.0.0
  */
 
 (function() {
@@ -723,9 +723,10 @@ define('index', ['exports', './active-model-adapter', './active-model-serializer
 define("initializers/active-model-adapter", ["exports", "active-model-adapter", "active-model-serializer"], function (exports, _activeModelAdapter, _activeModelAdapterActiveModelSerializer) {
   exports["default"] = {
     name: 'active-model-adapter',
-    initialize: function (registry, application) {
-      registry.register('adapter:-active-model', _activeModelAdapter["default"]);
-      registry.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"].extend({ isNewSerializerAPI: true }));
+    initialize: function () {
+      var application = arguments[1] || arguments[0];
+      application.register('adapter:-active-model', _activeModelAdapter["default"]);
+      application.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"].extend({ isNewSerializerAPI: true }));
     }
   };
 });
@@ -733,25 +734,17 @@ define('instance-initializers/active-model-adapter', ['exports', 'active-model-a
   exports["default"] = {
     name: 'active-model-adapter',
     initialize: function (applicationOrRegistry) {
-      var registry, container;
-      if (applicationOrRegistry.registry && applicationOrRegistry.container) {
+      var registry;
+      if (applicationOrRegistry.registry) {
         // initializeStoreService was registered with an
         // instanceInitializer. The first argument is the application
         // instance.
         registry = applicationOrRegistry.registry;
-        container = applicationOrRegistry.container;
       } else {
         // initializeStoreService was called by an initializer instead of
         // an instanceInitializer. The first argument is a registy. This
         // case allows ED to support Ember pre 1.12
         registry = applicationOrRegistry;
-        if (registry.container) {
-          // Support Ember 1.10 - 1.11
-          container = registry.container();
-        } else {
-          // Support Ember 1.9
-          container = registry;
-        }
       }
 
       registry.register('adapter:-active-model', _activeModelAdapter["default"]);
