@@ -5,7 +5,7 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   2.0.1
+ * @version   2.0.2
  */
 
 (function() {
@@ -214,6 +214,9 @@ define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exp
   var errorsHashToArray = _emberData["default"].errorsHashToArray;
   var RESTAdapter = _emberData["default"].RESTAdapter;
   var _Ember$String = _ember["default"].String;
+  var pluralize = _Ember$String.pluralize;
+  var decamelize = _Ember$String.decamelize;
+  var underscore = _Ember$String.underscore;
 
   /**
     @module ember-data
@@ -310,9 +313,6 @@ define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exp
     @extends DS.RESTAdapter
   **/
 
-  var pluralize = _Ember$String.pluralize;
-  var decamelize = _Ember$String.decamelize;
-  var underscore = _Ember$String.underscore;
   var ActiveModelAdapter = RESTAdapter.extend({
     defaultSerializer: '-active-model',
     /**
@@ -371,6 +371,7 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
   var camelize = _Ember$String.camelize;
   var underscore = _Ember$String.underscore;
   var RESTSerializer = _emberData["default"].RESTSerializer;
+  var normalizeModelName = _emberData["default"].normalizeModelName;
 
   /**
     The ActiveModelSerializer is a subclass of the RESTSerializer designed to integrate
@@ -459,7 +460,6 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
     @namespace DS
     @extends DS.RESTSerializer
   */
-  var normalizeModelName = _emberData["default"].normalizeModelName;
   var ActiveModelSerializer = RESTSerializer.extend({
     // SERIALIZE
 
@@ -626,21 +626,8 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
     var polymorphicKey = decamelize(key);
     var hash = resourceHash[polymorphicKey];
     if (hash !== null && typeof hash === 'object') {
-      if (relationshipMeta.kind === 'belongsTo') {
-        resourceHash[relationshipKey] = extractIDAndType(hash);
-        // otherwise hasMany
-      } else if (hash.length) {
-          var hashes = hash;
-          resourceHash[relationshipKey] = hashes.map(extractIDAndType);
-        }
+      resourceHash[relationshipKey] = hash;
     }
-  }
-
-  function extractIDAndType(hash) {
-    var id = hash.id;
-    var type = hash.type;
-
-    return { id: id, type: type };
   }
 
   exports["default"] = ActiveModelSerializer;
@@ -664,21 +651,21 @@ define('instance-initializers/active-model-adapter', ['exports', 'active-model-a
   exports["default"] = {
     name: 'active-model-adapter',
     initialize: function (applicationOrRegistry) {
-      var registry;
-      if (applicationOrRegistry.registry) {
+      var register;
+      if (applicationOrRegistry.register) {
+        // initializeStoreService was called by an initializer instead of
+        // an instanceInitializer. The first argument is a registry for
+        // Ember pre 1.12, or an application instance for Ember >2.1.
+        register = applicationOrRegistry.register;
+      } else {
         // initializeStoreService was registered with an
         // instanceInitializer. The first argument is the application
         // instance.
-        registry = applicationOrRegistry.registry;
-      } else {
-        // initializeStoreService was called by an initializer instead of
-        // an instanceInitializer. The first argument is a registy. This
-        // case allows ED to support Ember pre 1.12
-        registry = applicationOrRegistry;
+        register = applicationOrRegistry.registry.register;
       }
 
-      registry.register('adapter:-active-model', _activeModelAdapter["default"]);
-      registry.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
+      register.call(applicationOrRegistry, 'adapter:-active-model', _activeModelAdapter["default"]);
+      register.call(applicationOrRegistry, 'serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
     }
   };
 });
