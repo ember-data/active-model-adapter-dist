@@ -5,7 +5,7 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   2.0.2
+ * @version   2.0.3
  */
 
 (function() {
@@ -647,38 +647,12 @@ define("initializers/active-model-adapter", ["exports", "active-model-adapter", 
     }
   };
 });
-define('instance-initializers/active-model-adapter', ['exports', 'active-model-adapter', 'active-model-serializer'], function (exports, _activeModelAdapter, _activeModelAdapterActiveModelSerializer) {
-  exports["default"] = {
-    name: 'active-model-adapter',
-    initialize: function (applicationOrRegistry) {
-      var register;
-      if (applicationOrRegistry.register) {
-        // initializeStoreService was called by an initializer instead of
-        // an instanceInitializer. The first argument is a registry for
-        // Ember pre 1.12, or an application instance for Ember >2.1.
-        register = applicationOrRegistry.register;
-      } else {
-        // initializeStoreService was registered with an
-        // instanceInitializer. The first argument is the application
-        // instance.
-        register = applicationOrRegistry.registry.register;
-      }
-
-      register.call(applicationOrRegistry, 'adapter:-active-model', _activeModelAdapter["default"]);
-      register.call(applicationOrRegistry, 'serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
-    }
-  };
-});
-define('globals', ['exports', './index', 'instance-initializers/active-model-adapter', 'initializers/active-model-adapter', 'ember', 'ember-data'], function (exports, _index, _instanceInitializersActiveModelAdapter, _initializersActiveModelAdapter, _ember, _emberData) {
+define('globals', ['exports', './index', 'initializers/active-model-adapter', 'ember', 'ember-data'], function (exports, _index, _initializersActiveModelAdapter, _ember, _emberData) {
 
   _emberData["default"].ActiveModelAdapter = _index.ActiveModelAdapter;
   _emberData["default"].ActiveModelSerializer = _index.ActiveModelSerializer;
 
-  if (_ember["default"].Application.instanceInitializer) {
-    _ember["default"].Application.instanceInitializer(_instanceInitializersActiveModelAdapter["default"]);
-  } else {
-    _ember["default"].Application.initializer(_initializersActiveModelAdapter["default"]);
-  }
+  _ember["default"].Application.initializer(_initializersActiveModelAdapter["default"]);
 });
 // this file is used to generate the globals build.
 // DO NOT try to use this in your app.
