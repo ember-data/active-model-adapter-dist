@@ -5,7 +5,7 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   2.1.0
+ * @version   2.1.1
  */
 
 (function() {
@@ -684,16 +684,10 @@ define('index', ['exports', './active-model-adapter', './active-model-serializer
 define("initializers/active-model-adapter", ["exports", "active-model-adapter", "active-model-serializer"], function (exports, _activeModelAdapter, _activeModelAdapterActiveModelSerializer) {
   exports["default"] = {
     name: 'active-model-adapter',
-    initialize: function (app) {
-      if (arguments.length === 1) {
-        // support the old registration API
-        app.register('adapter:-active-model', _activeModelAdapter["default"]);
-        app.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
-      } else {
-        var registry = app;
-        registry.register('adapter:-active-model', _activeModelAdapter["default"]);
-        registry.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
-      }
+    initialize: function () {
+      var application = arguments[1] || arguments[0];
+      application.register('adapter:-active-model', _activeModelAdapter["default"]);
+      application.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
     }
   };
 });
