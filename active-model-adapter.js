@@ -5,53 +5,129 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   2.0.3
+ * @version   2.1.0
  */
 
 (function() {
 
-var define, requireModule, require, requirejs;
+var loader, define, requireModule, require, requirejs;
+var global = this;
 
 (function() {
+  'use strict';
+
+  // Save off the original values of these globals, so we can restore them if someone asks us to
+  var oldGlobals = {
+    loader: loader,
+    define: define,
+    requireModule: requireModule,
+    require: require,
+    requirejs: requirejs
+  };
+
+  loader = {
+    noConflict: function(aliases) {
+      var oldName, newName;
+
+      for (oldName in aliases) {
+        if (aliases.hasOwnProperty(oldName)) {
+          if (oldGlobals.hasOwnProperty(oldName)) {
+            newName = aliases[oldName];
+
+            global[newName] = global[oldName];
+            global[oldName] = oldGlobals[oldName];
+          }
+        }
+      }
+    }
+  };
 
   var _isArray;
   if (!Array.isArray) {
     _isArray = function (x) {
-      return Object.prototype.toString.call(x) === "[object Array]";
+      return Object.prototype.toString.call(x) === '[object Array]';
     };
   } else {
     _isArray = Array.isArray;
   }
 
-  var registry = {}, seen = {};
+  var registry = {};
+  var seen = {};
   var FAILED = false;
+  var LOADED = true;
 
   var uuid = 0;
 
-  function tryFinally(tryable, finalizer) {
-    try {
-      return tryable();
-    } finally {
-      finalizer();
-    }
-  }
-
   function unsupportedModule(length) {
-    throw new Error("an unsupported module was defined, expected `define(name, deps, module)` instead got: `" + length + "` arguments to define`");
+    throw new Error('an unsupported module was defined, expected `define(name, deps, module)` instead got: `' +
+                    length + '` arguments to define`');
   }
 
   var defaultDeps = ['require', 'exports', 'module'];
 
-  function Module(name, deps, callback, exports) {
-    this.id       = uuid++;
-    this.name     = name;
-    this.deps     = !deps.length && callback.length ? defaultDeps : deps;
-    this.exports  = exports || { };
-    this.callback = callback;
-    this.state    = undefined;
+  function Module(name, deps, callback) {
+    this.id        = uuid++;
+    this.name      = name;
+    this.deps      = !deps.length && callback.length ? defaultDeps : deps;
+    this.module    = { exports: {} };
+    this.callback  = callback;
+    this.state     = undefined;
     this._require  = undefined;
+    this.finalized = false;
+    this.hasExportsAsDep = false;
   }
 
+  Module.prototype.makeDefaultExport = function() {
+    var exports = this.module.exports;
+    if (exports !== null &&
+        (typeof exports === 'object' || typeof exports === 'function') &&
+          exports['default'] === undefined) {
+      exports['default'] = exports;
+    }
+  };
+
+  Module.prototype.exports = function(reifiedDeps) {
+    if (this.finalized) {
+      return this.module.exports;
+    } else {
+      var result = this.callback.apply(this, reifiedDeps);
+      if (!(this.hasExportsAsDep && result === undefined)) {
+        this.module.exports = result;
+      }
+      this.makeDefaultExport();
+      this.finalized = true;
+      return this.module.exports;
+    }
+  };
+
+  Module.prototype.unsee = function() {
+    this.finalized = false;
+    this.state = undefined;
+    this.module = { exports: {}};
+  };
+
+  Module.prototype.reify = function() {
+    var deps = this.deps;
+    var length = deps.length;
+    var reified = new Array(length);
+    var dep;
+
+    for (var i = 0, l = length; i < l; i++) {
+      dep = deps[i];
+      if (dep === 'exports') {
+        this.hasExportsAsDep = true;
+        reified[i] = this.module.exports;
+      } else if (dep === 'require') {
+        reified[i] = this.makeRequire();
+      } else if (dep === 'module') {
+        reified[i] = this.module;
+      } else {
+        reified[i] = findModule(resolve(dep, this.name), this.name).module.exports;
+      }
+    }
+
+    return reified;
+  };
 
   Module.prototype.makeRequire = function() {
     var name = this.name;
@@ -59,7 +135,14 @@ var define, requireModule, require, requirejs;
     return this._require || (this._require = function(dep) {
       return require(resolve(dep, name));
     });
-  }
+  };
+
+  Module.prototype.build = function() {
+    if (this.state === FAILED) { return; }
+    this.state = FAILED;
+    this.exports(this.reify());
+    this.state = LOADED;
+  };
 
   define = function(name, deps, callback) {
     if (arguments.length < 2) {
@@ -87,92 +170,27 @@ var define, requireModule, require, requirejs;
     return new Alias(path);
   };
 
-  function reify(mod, name, seen) {
-    var deps = mod.deps;
-    var length = deps.length;
-    var reified = new Array(length);
-    var dep;
-    // TODO: new Module
-    // TODO: seen refactor
-    var module = { };
-
-    for (var i = 0, l = length; i < l; i++) {
-      dep = deps[i];
-      if (dep === 'exports') {
-        module.exports = reified[i] = seen;
-      } else if (dep === 'require') {
-        reified[i] = mod.makeRequire();
-      } else if (dep === 'module') {
-        mod.exports = seen;
-        module = reified[i] = mod;
-      } else {
-        reified[i] = requireFrom(resolve(dep, name), name);
-      }
-    }
-
-    return {
-      deps: reified,
-      module: module
-    };
+  function missingModule(name, referrer) {
+    throw new Error('Could not find module `' + name + '` imported from `' + referrer + '`');
   }
 
-  function requireFrom(name, origin) {
-    var mod = registry[name];
-    if (!mod) {
-      throw new Error('Could not find module `' + name + '` imported from `' + origin + '`');
-    }
-    return require(name);
-  }
-
-  function missingModule(name) {
-    throw new Error('Could not find module ' + name);
-  }
   requirejs = require = requireModule = function(name) {
-    var mod = registry[name];
-
-
-    if (mod && mod.callback instanceof Alias) {
-      mod = registry[mod.callback.name];
-    }
-
-    if (!mod) { missingModule(name); }
-
-    if (mod.state !== FAILED &&
-        seen.hasOwnProperty(name)) {
-      return seen[name];
-    }
-
-    var reified;
-    var module;
-    var loaded = false;
-
-    seen[name] = { }; // placeholder for run-time cycles
-
-    tryFinally(function() {
-      reified = reify(mod, name, seen[name]);
-      module = mod.callback.apply(this, reified.deps);
-      loaded = true;
-    }, function() {
-      if (!loaded) {
-        mod.state = FAILED;
-      }
-    });
-
-    var obj;
-    if (module === undefined && reified.module.exports) {
-      obj = reified.module.exports;
-    } else {
-      obj = seen[name] = module;
-    }
-
-    if (obj !== null &&
-        (typeof obj === 'object' || typeof obj === 'function') &&
-          obj['default'] === undefined) {
-      obj['default'] = obj;
-    }
-
-    return (seen[name] = obj);
+    return findModule(name, '(require)').module.exports;
   };
+
+  function findModule(name, referrer) {
+    var mod = registry[name] || registry[name + '/index'];
+
+    while (mod && mod.callback instanceof Alias) {
+      name = mod.callback.name;
+      mod = registry[name];
+    }
+
+    if (!mod) { missingModule(name, referrer); }
+
+    mod.build();
+    return mod;
+  }
 
   function resolve(child, name) {
     if (child.charAt(0) !== '.') { return child; }
@@ -189,17 +207,22 @@ var define, requireModule, require, requirejs;
           throw new Error('Cannot access parent module of root');
         }
         parentBase.pop();
-      } else if (part === '.') { continue; }
-      else { parentBase.push(part); }
+      } else if (part === '.') {
+        continue;
+      } else { parentBase.push(part); }
     }
 
     return parentBase.join('/');
   }
 
   requirejs.entries = requirejs._eak_seen = registry;
-  requirejs.clear = function(){
+  requirejs.unsee = function(moduleName) {
+    findModule(moduleName, '(unsee)').unsee();
+  };
+
+  requirejs.clear = function() {
     requirejs.entries = requirejs._eak_seen = registry = {};
-    seen = state = {};
+    seen = {};
   };
 })();
 
@@ -341,9 +364,11 @@ define('active-model-adapter', ['exports', 'ember', 'ember-data'], function (exp
       content was not semantically correct or meaningful per the API.
        For more information on 422 HTTP Error code see 11.2 WebDAV RFC 4918
       https://tools.ietf.org/html/rfc4918#section-11.2
-       @method ajaxError
-      @param {Object} jqXHR
-      @return error
+       @method handleResponse
+      @param  {Number} status
+      @param  {Object} headers
+      @param  {Object} payload
+      @return {Object | DS.AdapterError} response
     */
     handleResponse: function (status, headers, payload) {
       if (this.isInvalid(status, headers, payload)) {
@@ -368,6 +393,7 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
   var singularize = _Ember$String.singularize;
   var classify = _Ember$String.classify;
   var decamelize = _Ember$String.decamelize;
+  var pluralize = _Ember$String.pluralize;
   var camelize = _Ember$String.camelize;
   var underscore = _Ember$String.underscore;
   var RESTSerializer = _emberData["default"].RESTSerializer;
@@ -592,9 +618,27 @@ define('active-model-serializer', ['exports', 'ember-data', 'ember'], function (
       }
     },
 
+    /**
+     * @private
+    */
+    _keyForIDLessRelationship: function (key, relationshipType, type) {
+      if (relationshipType === 'hasMany') {
+        return underscore(pluralize(key));
+      } else {
+        return underscore(singularize(key));
+      }
+    },
+
     extractRelationships: function (modelClass, resourceHash) {
       modelClass.eachRelationship(function (key, relationshipMeta) {
         var relationshipKey = this.keyForRelationship(key, relationshipMeta.kind, "deserialize");
+
+        var idLessKey = this._keyForIDLessRelationship(key, relationshipMeta.kind, "deserialize");
+
+        // converts post to post_id, posts to post_ids
+        if (resourceHash[idLessKey] && typeof relationshipMeta[relationshipKey] === 'undefined') {
+          resourceHash[relationshipKey] = resourceHash[idLessKey];
+        }
 
         // prefer the format the AMS gem expects, e.g.:
         // relationship: {id: id, type: type}
@@ -640,10 +684,16 @@ define('index', ['exports', './active-model-adapter', './active-model-serializer
 define("initializers/active-model-adapter", ["exports", "active-model-adapter", "active-model-serializer"], function (exports, _activeModelAdapter, _activeModelAdapterActiveModelSerializer) {
   exports["default"] = {
     name: 'active-model-adapter',
-    initialize: function () {
-      var application = arguments[1] || arguments[0];
-      application.register('adapter:-active-model', _activeModelAdapter["default"]);
-      application.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
+    initialize: function (app) {
+      if (arguments.length === 1) {
+        // support the old registration API
+        app.register('adapter:-active-model', _activeModelAdapter["default"]);
+        app.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
+      } else {
+        var registry = app;
+        registry.register('adapter:-active-model', _activeModelAdapter["default"]);
+        registry.register('serializer:-active-model', _activeModelAdapterActiveModelSerializer["default"]);
+      }
     }
   };
 });
